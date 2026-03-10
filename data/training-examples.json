@@ -1,0 +1,231 @@
+[
+  {
+    "id": "a9a6d5a9-c236-4120-bb24-41733b71ac0a",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/api/scans/a9a6d5a9-c236-4120-bb24-41733b71ac0a/source-image",
+    "sourceImageDirectUrl": "https://cdn.discordapp.com/attachments/1383627038530998292/1480768425189052426/WhatsApp_Image_2026-03-10_at_11.01.05.jpeg?ex=69b0e08f&is=69af8f0f&hm=4084c0d09cad3475751099231b2da1312974165009d1ed827cb5b8fda007e583&",
+    "sourceStorage": "discord",
+    "discordMessageId": "1480768425805742233",
+    "discordAttachmentId": "1480768425189052426",
+    "discordFilename": "WhatsApp_Image_2026-03-10_at_11.01.05.jpeg",
+    "extractedFields": {
+      "merchant": "DANA",
+      "transactionDate": "2026-03-08",
+      "currency": "IDR",
+      "amountTotal": 51500,
+      "category": "Utilities",
+      "notes": "Prepaid electricity token purchase for Rp50,000 (33.7 kWh) via DANA, total payment Rp51,500 including admin fee."
+    },
+    "reviewedFields": {
+      "merchant": "DANA",
+      "transactionDate": "2026-03-08",
+      "currency": "IDR",
+      "amountTotal": 51500,
+      "category": "Utilities",
+      "notes": "Prepaid electricity token purchase for Rp50,000 (33.7 kWh) via DANA, total payment Rp51,500 including admin fee."
+    },
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"DANA\",\n  \"transactionDate\": \"2026-03-08\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 51500,\n  \"category\": \"Utilities\",\n  \"notes\": \"Prepaid electricity token purchase for Rp50,000 (33.7 kWh) via DANA, total payment Rp51,500 including admin fee.\",\n  \"confidence\": 1.0,\n  \"issues\": []\n}",
+    "confidence": 1,
+    "issues": [],
+    "reviewStatus": "approved",
+    "expenseId": "8b245e3b-9e9c-459f-a073-a18dc5f95157",
+    "createdAt": "2026-03-10T03:25:13.790Z",
+    "updatedAt": "2026-03-10T03:25:47.863Z",
+    "reviewedAt": "2026-03-10T03:25:46.677Z"
+  },
+  {
+    "id": "7486e74e-d73c-49a8-bede-74906fd0d7fc",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/ac5ec7ce-7054-4470-a1ec-36f00f59509d.jpeg",
+    "extractedFields": {
+      "merchant": "Indomaret",
+      "transactionDate": "2026-02-10",
+      "currency": "IDR",
+      "amountTotal": 345200,
+      "category": "Bills",
+      "notes": "Payment for PDAM water bill and purchase of personal care and food items."
+    },
+    "reviewedFields": {
+      "merchant": "Indomaret",
+      "transactionDate": "2026-02-10",
+      "currency": "IDR",
+      "amountTotal": 345200,
+      "category": "Bills",
+      "notes": "Payment for PDAM water bill and purchase of personal care and food items."
+    },
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"Indomaret\",\n  \"transactionDate\": \"2026-02-10\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 345200,\n  \"category\": \"Bills\",\n  \"notes\": \"Payment for PDAM water bill and purchase of personal care and food items.\",\n  \"confidence\": 0.95,\n  \"issues\": []\n}",
+    "confidence": 0.95,
+    "issues": [],
+    "reviewStatus": "approved",
+    "expenseId": "e5058c56-d030-41df-9e51-ce29d0a57fa0",
+    "createdAt": "2026-03-10T02:50:47.105Z",
+    "updatedAt": "2026-03-10T02:51:00.968Z",
+    "reviewedAt": "2026-03-10T02:51:00.216Z"
+  },
+  {
+    "id": "bee7d4ed-4050-438d-ae84-4b10da8dda6c",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/7ba639d0-3c45-4cdc-8210-597f5c686ccc.jpeg",
+    "extractedFields": {
+      "merchant": "DAE",
+      "transactionDate": "2020-03-09",
+      "currency": "IDR",
+      "amountTotal": 874500,
+      "category": "Food",
+      "notes": "Purchase of various food and beverages including Nasi Ayam, Mie Tek Tek, and several drinks."
+    },
+    "reviewedFields": {
+      "merchant": "DAE",
+      "transactionDate": "2026-03-09",
+      "currency": "IDR",
+      "amountTotal": 874500,
+      "category": "Food",
+      "notes": "Purchase of various food and beverages including Nasi Ayam, Mie Tek Tek, and several drinks."
+    },
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"DAE\",\n  \"transactionDate\": \"2020-03-09\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 874500,\n  \"category\": \"Food\",\n  \"notes\": \"Purchase of various food and beverages including Nasi Ayam, Mie Tek Tek, and several drinks.\",\n  \"confidence\": 0.95,\n  \"issues\": []\n}",
+    "confidence": 0.95,
+    "issues": [],
+    "reviewStatus": "approved",
+    "expenseId": "013aa768-de7a-415f-8881-0997712aca9c",
+    "createdAt": "2026-03-10T02:49:54.366Z",
+    "updatedAt": "2026-03-10T02:52:52.350Z",
+    "reviewedAt": "2026-03-10T02:52:52.340Z"
+  },
+  {
+    "id": "4a2785d5-1e5b-4c01-8946-9e95e3d2c741",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/2fb3167c-4973-4841-b5b8-3c28edd8562a.jpeg",
+    "extractedFields": {
+      "merchant": "DAE",
+      "transactionDate": "2026-03-10",
+      "currency": "IDR",
+      "amountTotal": 874500,
+      "category": "Food",
+      "notes": "Purchase of various Indonesian food and beverages including rice dishes, noodles, and several drinks."
+    },
+    "reviewedFields": null,
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"DAE\",\n  \"transactionDate\": \"YYYY-MM-DD\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 874500,\n  \"category\": \"Food\",\n  \"notes\": \"Purchase of various Indonesian food and beverages including rice dishes, noodles, and several drinks.\",\n  \"confidence\": 0.85,\n  \"issues\": [\n    \"Transaction date not found on receipt.\"\n  ]\n}",
+    "confidence": 0.85,
+    "issues": [
+      "Transaction date not found on receipt."
+    ],
+    "reviewStatus": "draft",
+    "expenseId": null,
+    "createdAt": "2026-03-10T02:47:52.240Z",
+    "updatedAt": "2026-03-10T02:47:52.240Z"
+  },
+  {
+    "id": "669f1332-b39a-4061-92a8-dab8aaf4e059",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/4d47e195-0f17-4b90-be21-cd301a704d8e.jpg",
+    "extractedFields": {
+      "merchant": "Indomaret",
+      "transactionDate": "2017-09-05",
+      "currency": "IDR",
+      "amountTotal": 76300,
+      "category": "Shopping",
+      "notes": "Purchase of groceries including rice, fabric softener, and a lychee drink from Indomaret."
+    },
+    "reviewedFields": {
+      "merchant": "Indomaret",
+      "transactionDate": "2017-09-05",
+      "currency": "IDR",
+      "amountTotal": 76300,
+      "category": "Shopping",
+      "notes": "Purchase of groceries including rice, fabric softener, and a lychee drink from Indomaret."
+    },
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"Indomaret\",\n  \"transactionDate\": \"2017-09-05\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 76300,\n  \"category\": \"Shopping\",\n  \"notes\": \"Purchase of groceries including rice, fabric softener, and a lychee drink from Indomaret.\",\n  \"confidence\": 0.95,\n  \"issues\": []\n}",
+    "confidence": 0.95,
+    "issues": [],
+    "reviewStatus": "approved",
+    "expenseId": "e3e7d874-8b20-4dfd-8c7d-f8feef3a2ebd",
+    "createdAt": "2026-03-10T02:39:03.535Z",
+    "updatedAt": "2026-03-10T02:39:29.234Z",
+    "reviewedAt": "2026-03-10T02:39:29.227Z"
+  },
+  {
+    "id": "26406fe3-656f-4148-b0d0-fd6d9895c17b",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/bb482c17-a287-4b08-9c6c-ff97135efe0e.jpg",
+    "extractedFields": {
+      "merchant": "CONTOH STRUK PEMBAYARAN INDOMARET2",
+      "transactionDate": "2026-03-10",
+      "currency": "IDR",
+      "amountTotal": 0,
+      "category": "Other",
+      "notes": "Mock extraction. Configure Gemini for real scan output."
+    },
+    "reviewedFields": null,
+    "provider": "mock",
+    "rawModelOutput": "{\"merchant\":\"CONTOH STRUK PEMBAYARAN INDOMARET2\",\"transactionDate\":\"2026-03-10\",\"currency\":\"IDR\",\"amountTotal\":0,\"category\":\"Other\",\"notes\":\"Mock extraction. Configure Gemini for real scan output.\",\"confidence\":0.18,\"issues\":[\"Gemini API key is not configured.\"]}",
+    "confidence": 0.18,
+    "issues": [
+      "Gemini API key is not configured."
+    ],
+    "reviewStatus": "draft",
+    "expenseId": null,
+    "createdAt": "2026-03-10T02:32:44.756Z",
+    "updatedAt": "2026-03-10T02:32:44.756Z"
+  },
+  {
+    "id": "c51026a4-4966-4b93-8515-1abc3445ed80",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/62db45c9-b582-459c-b1cc-f0ad0c654806.jpg",
+    "extractedFields": {
+      "merchant": "CONTOH STRUK PEMBAYARAN INDOMARET2",
+      "transactionDate": "2026-03-10",
+      "currency": "IDR",
+      "amountTotal": 0,
+      "category": "Other",
+      "notes": "Mock extraction. Configure Gemini for real scan output."
+    },
+    "reviewedFields": null,
+    "provider": "mock",
+    "rawModelOutput": "{\"merchant\":\"CONTOH STRUK PEMBAYARAN INDOMARET2\",\"transactionDate\":\"2026-03-10\",\"currency\":\"IDR\",\"amountTotal\":0,\"category\":\"Other\",\"notes\":\"Mock extraction. Configure Gemini for real scan output.\",\"confidence\":0.18,\"issues\":[\"Gemini API key is not configured.\"]}",
+    "confidence": 0.18,
+    "issues": [
+      "Gemini API key is not configured."
+    ],
+    "reviewStatus": "draft",
+    "expenseId": null,
+    "createdAt": "2026-03-10T02:32:44.095Z",
+    "updatedAt": "2026-03-10T02:32:44.095Z"
+  },
+  {
+    "id": "af9ef8c9-ee65-417b-a24e-380f867e74e6",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/uploads/07ace43a-7787-45e6-a882-6675326b99f0.jpg",
+    "extractedFields": {
+      "merchant": "CONTOH STRUK PEMBAYARAN INDOMARET2",
+      "transactionDate": "2026-03-10",
+      "currency": "IDR",
+      "amountTotal": 0,
+      "category": "Other",
+      "notes": "Mock extraction. Configure Gemini for real scan output."
+    },
+    "reviewedFields": null,
+    "provider": "mock",
+    "rawModelOutput": "{\"merchant\":\"CONTOH STRUK PEMBAYARAN INDOMARET2\",\"transactionDate\":\"2026-03-10\",\"currency\":\"IDR\",\"amountTotal\":0,\"category\":\"Other\",\"notes\":\"Mock extraction. Configure Gemini for real scan output.\",\"confidence\":0.18,\"issues\":[\"Gemini API key is not configured.\"]}",
+    "confidence": 0.18,
+    "issues": [
+      "Gemini API key is not configured."
+    ],
+    "reviewStatus": "draft",
+    "expenseId": null,
+    "createdAt": "2026-03-10T02:32:30.807Z",
+    "updatedAt": "2026-03-10T02:32:30.807Z"
+  }
+]
