@@ -3,50 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bill Tracker Control Room</title>
+  <title>Bill Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="shell">
     <header class="hero">
       <div>
-        <p class="eyebrow">Receipt ops</p>
-        <h1>Bill tracker built for review, sync, and better training data.</h1>
-        <p class="hero-copy">
-          Upload Indonesian retail receipts, review extracted fields, save normalized expenses,
-          and sync approved rows into Google Sheets.
-        </p>
+        <p class="eyebrow">Bill tracker</p>
+        <h1>Scan. Review. Save.</h1>
+        <p class="hero-copy">Compact receipt capture with sheet sync.</p>
       </div>
       <div class="hero-card">
         <div class="hero-stat">
-          <span class="hero-stat-label">Google Sheets</span>
+          <span class="hero-stat-label">Sheets</span>
           <strong id="sheet-status">Checking...</strong>
         </div>
         <div class="hero-stat">
-          <span class="hero-stat-label">Dataset locale</span>
+          <span class="hero-stat-label">Locale</span>
           <strong id="locale-status">ID locale</strong>
         </div>
+        <div class="hero-stat">
+          <span class="hero-stat-label">Uploads</span>
+          <strong id="discord-status">Checking...</strong>
+        </div>
+        <form id="settings-form" class="settings-form">
+          <label>
+            <span>Sheet ID</span>
+            <input id="settings-sheet-id" type="text" placeholder="Spreadsheet ID">
+          </label>
+          <label>
+            <span>Webhook</span>
+            <input id="settings-discord-webhook" type="url" placeholder="Discord webhook URL">
+          </label>
+          <div class="settings-actions">
+            <button class="ghost-button" type="submit">Save config</button>
+          </div>
+        </form>
+        <div class="status-banner hidden" id="settings-status"></div>
       </div>
     </header>
 
     <section class="stats-grid">
       <article class="metric-card">
-        <span class="metric-label">Total spent</span>
+        <span class="metric-label">Total</span>
         <strong class="metric-value" id="stat-total">Rp0</strong>
       </article>
       <article class="metric-card">
-        <span class="metric-label">This month</span>
+        <span class="metric-label">Month</span>
         <strong class="metric-value" id="stat-month">Rp0</strong>
       </article>
       <article class="metric-card">
-        <span class="metric-label">Approved bills</span>
+        <span class="metric-label">Saved</span>
         <strong class="metric-value" id="stat-count">0</strong>
       </article>
       <article class="metric-card">
-        <span class="metric-label">Pending sync</span>
+        <span class="metric-label">Queue</span>
         <strong class="metric-value" id="stat-pending">0</strong>
       </article>
     </section>
@@ -56,26 +71,26 @@
         <div class="panel-head">
           <div>
             <p class="panel-kicker">Capture</p>
-            <h2>Scan and review</h2>
+            <h2>New expense</h2>
           </div>
-          <button class="ghost-button" id="new-expense-btn" type="button">New manual expense</button>
+          <button class="ghost-button" id="new-expense-btn" type="button">Manual</button>
         </div>
 
         <form id="scan-form" class="scan-form">
           <label class="dropzone" id="dropzone">
             <input id="receipt-input" type="file" accept="image/*">
-            <span class="dropzone-icon">Scan</span>
-            <strong>Drop a receipt image or click to browse</strong>
-            <span>JPG, PNG, WEBP up to 8 MB. Review is required before sync.</span>
+            <span class="dropzone-icon">+</span>
+            <strong>Drop receipt</strong>
+            <span>JPG, PNG, WEBP. Max 8 MB.</span>
           </label>
           <div class="preview-card hidden" id="preview-card">
             <img id="preview-image" alt="Receipt preview">
             <div class="preview-meta">
-              <span id="scan-provider">Waiting for scan</span>
+              <span id="scan-provider">No file</span>
               <button class="ghost-button" id="clear-upload-btn" type="button">Clear</button>
             </div>
           </div>
-          <button class="primary-button" id="scan-btn" type="submit">Run scan</button>
+          <button class="primary-button" id="scan-btn" type="submit">Scan</button>
         </form>
 
         <div class="status-banner hidden" id="scan-status"></div>
@@ -84,7 +99,7 @@
           <div class="panel-head tight">
             <div>
               <p class="panel-kicker">Review</p>
-              <h3 id="editor-title">Create approved expense</h3>
+              <h3 id="editor-title">Create expense</h3>
             </div>
             <span class="pill" id="review-state">Draft</span>
           </div>
@@ -97,14 +112,14 @@
           <form id="expense-form" class="fields-grid">
             <label>
               <span>Merchant</span>
-              <input id="merchant" name="merchant" type="text" placeholder="Merchant name">
+              <input id="merchant" name="merchant" type="text" placeholder="Store">
             </label>
             <label>
-              <span>Transaction date</span>
+              <span>Date</span>
               <input id="transactionDate" name="transactionDate" type="date">
             </label>
             <label>
-              <span>Amount total</span>
+              <span>Amount</span>
               <input id="amountTotal" name="amountTotal" type="number" step="0.01" min="0">
             </label>
             <label>
@@ -117,10 +132,10 @@
             </label>
             <label class="field-full">
               <span>Notes</span>
-              <textarea id="notes" name="notes" rows="3" placeholder="Receipt summary or review notes"></textarea>
+              <textarea id="notes" name="notes" rows="2" placeholder="Optional"></textarea>
             </label>
             <div class="form-actions field-full">
-              <button class="primary-button" id="save-btn" type="submit">Save and sync</button>
+              <button class="primary-button" id="save-btn" type="submit">Save</button>
               <button class="ghost-button" id="cancel-edit-btn" type="button">Reset</button>
             </div>
           </form>
@@ -131,52 +146,45 @@
         <div class="panel-head">
           <div>
             <p class="panel-kicker">Ledger</p>
-            <h2>Approved expenses</h2>
+            <h2>Expenses</h2>
           </div>
           <button class="ghost-button" id="refresh-btn" type="button">Refresh</button>
         </div>
 
         <div class="toolbar">
           <label class="toolbar-field">
-            <span>Search</span>
-            <input id="search-input" type="search" placeholder="Merchant or notes">
+            <span>Find</span>
+            <input id="search-input" type="search" placeholder="Search">
           </label>
           <label class="toolbar-field">
-            <span>Category</span>
+            <span>Cat</span>
             <select id="filter-category"></select>
-          </label>
-          <label class="toolbar-field">
-            <span>Sync</span>
-            <select id="filter-sync">
-              <option value="all">All</option>
-              <option value="pending">Pending</option>
-              <option value="synced">Synced</option>
-              <option value="error">Error</option>
-              <option value="skipped">Skipped</option>
-            </select>
           </label>
         </div>
 
         <div class="table-wrap">
+          <div class="list-loading hidden" id="list-loading">
+            <span class="list-loading-spinner" aria-hidden="true"></span>
+            <span>Loading</span>
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Merchant</th>
                 <th>Date</th>
                 <th>Amount</th>
-                <th>Category</th>
-                <th>Sync</th>
-                <th>Actions</th>
+                <th>Cat</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="expense-table"></tbody>
           </table>
-          <div class="empty-state hidden" id="expense-empty">No approved expenses yet.</div>
+          <div class="empty-state hidden" id="expense-empty">No expenses.</div>
         </div>
 
         <div class="pager">
-          <button class="ghost-button" id="prev-page-btn" type="button">Previous</button>
-          <span id="page-label">Page 1</span>
+          <button class="ghost-button" id="prev-page-btn" type="button">Prev</button>
+          <span id="page-label">1 / 1</span>
           <button class="ghost-button" id="next-page-btn" type="button">Next</button>
         </div>
       </section>

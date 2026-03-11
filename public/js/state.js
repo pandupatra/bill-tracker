@@ -2,7 +2,13 @@ export const state = {
   categories: [],
   googleSheetsConfigured: false,
   googleSheetsConfigReason: "",
+  discordUploadsConfigured: false,
+  discordUploadsConfigReason: "",
   geminiConfigured: false,
+  settings: {
+    googleSheetsSpreadsheetId: "",
+    discordWebhookUrl: ""
+  },
   pagination: {
     page: 1,
     pageSize: 10,

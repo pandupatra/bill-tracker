@@ -1,41 +1,52 @@
-import { createExpense, getMeta, listExpenses, scanReceipt, syncExpense, updateExpense } from "./api.js";
+import {
+  createExpense,
+  deleteExpense,
+  getMeta,
+  listExpenses,
+  scanReceipt,
+  setRuntimeSettings,
+  updateExpense
+} from "./api.js";
 import { resetDraft, state } from "./state.js";
 import {
   clearStatus,
   fillCategories,
   fillEditor,
+  fillSettings,
   renderDraftFeedback,
   renderExpenses,
   renderPagination,
   renderStats,
   setEditorMode,
   setHeroMeta,
+  setListLoading,
   showStatus,
   updatePreview
 } from "./ui.js";
 
 const scanStatus = document.getElementById("scan-status");
+const settingsStatus = document.getElementById("settings-status");
 const receiptInput = document.getElementById("receipt-input");
 const dropzone = document.getElementById("dropzone");
+const SETTINGS_STORAGE_KEY = "bill-tracker.settings";
 
 async function bootstrap() {
+  const storedSettings = readStoredSettings();
+  setRuntimeSettings(storedSettings);
   const meta = await getMeta();
-  state.categories = meta.categories;
-  state.googleSheetsConfigured = meta.googleSheetsConfigured;
-  state.googleSheetsConfigReason = meta.googleSheetsConfigReason || "";
-  state.geminiConfigured = meta.geminiConfigured;
+  applyMeta(meta);
 
   fillCategories(document.getElementById("category"));
   fillCategories(document.getElementById("filter-category"), true);
   document.getElementById("currency").value = meta.defaultCurrency;
   document.getElementById("transactionDate").value = new Date().toISOString().slice(0, 10);
-  setHeroMeta();
   setEditorForCreate();
   bindEvents();
   await refreshExpenses();
 }
 
 function bindEvents() {
+  document.getElementById("settings-form").addEventListener("submit", onSaveSettings);
   document.getElementById("scan-form").addEventListener("submit", onScanSubmit);
   document.getElementById("expense-form").addEventListener("submit", onSaveExpense);
   document.getElementById("clear-upload-btn").addEventListener("click", clearUpload);
@@ -64,11 +75,6 @@ function bindEvents() {
     state.pagination.page = 1;
     await refreshExpenses();
   });
-  document.getElementById("filter-sync").addEventListener("change", async (event) => {
-    state.filters.syncStatus = event.target.value;
-    state.pagination.page = 1;
-    await refreshExpenses();
-  });
   document.getElementById("expense-table").addEventListener("click", onTableAction);
 
   receiptInput.addEventListener("change", (event) => {
@@ -94,6 +100,72 @@ function bindEvents() {
   });
 }
 
+function applyMeta(meta) {
+  state.categories = meta.categories;
+  state.googleSheetsConfigured = meta.googleSheetsConfigured;
+  state.googleSheetsConfigReason = meta.googleSheetsConfigReason || "";
+  state.discordUploadsConfigured = meta.discordUploadsConfigured;
+  state.discordUploadsConfigReason = meta.discordUploadsConfigReason || "";
+  state.geminiConfigured = meta.geminiConfigured;
+  state.settings = {
+    googleSheetsSpreadsheetId: meta.settings?.googleSheetsSpreadsheetId || "",
+    discordWebhookUrl: meta.settings?.discordWebhookUrl || ""
+  };
+  fillSettings(state.settings);
+  setHeroMeta();
+}
+
+async function onSaveSettings(event) {
+  event.preventDefault();
+
+  try {
+    showStatus(settingsStatus, "Saving config...", "success");
+    const nextSettings = {
+      googleSheetsSpreadsheetId: document.getElementById("settings-sheet-id").value.trim(),
+      discordWebhookUrl: document.getElementById("settings-discord-webhook").value.trim()
+    };
+
+    if (nextSettings.discordWebhookUrl) {
+      try {
+        new URL(nextSettings.discordWebhookUrl);
+      } catch {
+        throw new Error("Discord webhook URL is invalid.");
+      }
+    }
+
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
+    setRuntimeSettings(nextSettings);
+    const meta = await getMeta();
+    applyMeta(meta);
+    showStatus(settingsStatus, "Saved on this device.", "success");
+  } catch (error) {
+    showStatus(settingsStatus, error.message, "error");
+  }
+}
+
+function readStoredSettings() {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return {
+        googleSheetsSpreadsheetId: "",
+        discordWebhookUrl: ""
+      };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      googleSheetsSpreadsheetId: String(parsed.googleSheetsSpreadsheetId || "").trim(),
+      discordWebhookUrl: String(parsed.discordWebhookUrl || "").trim()
+    };
+  } catch {
+    return {
+      googleSheetsSpreadsheetId: "",
+      discordWebhookUrl: ""
+    };
+  }
+}
+
 function setUpload(file) {
   state.currentUpload = {
     file,
@@ -112,7 +184,7 @@ async function onScanSubmit(event) {
   }
 
   try {
-    showStatus(scanStatus, "Scanning receipt...", "success");
+    showStatus(scanStatus, "Scanning...", "success");
     const result = await scanReceipt(state.currentUpload.file);
     state.currentDraft = result;
     state.editingExpenseId = null;
@@ -120,13 +192,13 @@ async function onScanSubmit(event) {
     fillEditor(result.draft);
     renderDraftFeedback(result);
     setEditorMode({
-      title: "Review scanned expense",
-      stateLabel: "Scan draft",
-      submitLabel: "Approve and sync"
+      title: "Review scan",
+      stateLabel: "Scanned",
+      submitLabel: "Save"
     });
     state.currentUpload.label = `Provider: ${result.provider}`;
     updatePreview(state.currentUpload);
-    showStatus(scanStatus, "Scan completed. Review fields before saving.", "success");
+    showStatus(scanStatus, "Scan ready.", "success");
   } catch (error) {
     showStatus(scanStatus, error.message, "error");
   }
@@ -139,7 +211,11 @@ async function onSaveExpense(event) {
   try {
     if (state.editingExpenseId) {
       await updateExpense(state.editingExpenseId, payload);
-      showStatus(scanStatus, "Expense updated. Re-sync if needed.", "success");
+      showStatus(
+        scanStatus,
+        state.googleSheetsConfigured ? "Updated in sheet." : "Expense updated.",
+        "success"
+      );
     } else {
       await createExpense({
         ...payload,
@@ -150,8 +226,8 @@ async function onSaveExpense(event) {
       showStatus(
         scanStatus,
         state.googleSheetsConfigured
-          ? "Expense saved and sync attempted."
-          : "Expense saved. Configure Google Sheets to sync rows.",
+          ? "Saved to sheet."
+          : "Saved locally.",
         "success"
       );
     }
@@ -175,27 +251,33 @@ function readForm() {
 }
 
 async function refreshExpenses() {
-  const result = await listExpenses({
-    page: state.pagination.page,
-    pageSize: state.pagination.pageSize,
-    search: state.filters.search,
-    category: state.filters.category,
-    syncStatus: state.filters.syncStatus
-  });
+  setListLoading(true);
 
-  state.expenses = result.items;
-  state.pagination = result.pagination;
-  renderExpenses(result.items);
-  renderPagination();
+  try {
+    const result = await listExpenses({
+      page: state.pagination.page,
+      pageSize: state.pagination.pageSize,
+      search: state.filters.search,
+      category: state.filters.category,
+      syncStatus: state.filters.syncStatus
+    });
 
-  const summaryResult = await listExpenses({
-    page: 1,
-    pageSize: 1000,
-    search: "",
-    category: "all",
-    syncStatus: "all"
-  });
-  renderStats(summaryResult.items);
+    state.expenses = result.items;
+    state.pagination = result.pagination;
+    renderExpenses(result.items);
+    renderPagination();
+
+    const summaryResult = await listExpenses({
+      page: 1,
+      pageSize: 1000,
+      search: "",
+      category: "all",
+      syncStatus: "all"
+    });
+    renderStats(summaryResult.items);
+  } finally {
+    setListLoading(false);
+  }
 }
 
 async function onTableAction(event) {
@@ -219,8 +301,8 @@ async function onTableAction(event) {
     renderDraftFeedback(null);
     setEditorMode({
       title: `Edit ${expense.merchant}`,
-      stateLabel: "Approved",
-      submitLabel: "Update expense"
+      stateLabel: "Edit",
+      submitLabel: "Update"
     });
     if (expense.sourceImage) {
       state.currentUpload = {
@@ -234,19 +316,29 @@ async function onTableAction(event) {
     return;
   }
 
-  if (button.dataset.action === "sync") {
+  if (button.dataset.action === "delete") {
+    const confirmed = window.confirm(`Delete expense "${expense.merchant}"?`);
+    if (!confirmed) {
+      return;
+    }
+
     try {
-      const synced = await syncExpense(expense.id);
+      await deleteExpense(expense.id);
+      if (state.editingExpenseId === expense.id) {
+        resetEditor();
+      }
       showStatus(
         scanStatus,
-        synced.syncStatus === "synced" ? "Sheet sync completed." : synced.syncError || "Sync skipped.",
-        synced.syncStatus === "synced" ? "success" : "error"
+        state.googleSheetsConfigured ? "Deleted from sheet." : "Expense deleted.",
+        "success"
       );
       await refreshExpenses();
     } catch (error) {
       showStatus(scanStatus, error.message, "error");
     }
+    return;
   }
+
 }
 
 function resetEditor() {
@@ -266,9 +358,9 @@ function resetEditor() {
 
 function setEditorForCreate() {
   setEditorMode({
-    title: "Create approved expense",
+    title: "Create expense",
     stateLabel: "Draft",
-    submitLabel: "Save and sync"
+    submitLabel: "Save"
   });
 }
 

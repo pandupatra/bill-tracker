@@ -1,5 +1,41 @@
 [
   {
+    "id": "69085240-77f0-4b88-801a-b9755415e1f4",
+    "locale": "id-ID",
+    "documentType": "retail-receipt",
+    "sourceImage": "/api/scans/69085240-77f0-4b88-801a-b9755415e1f4/source-image",
+    "sourceImageDirectUrl": "https://cdn.discordapp.com/attachments/1383627038530998292/1481117584794321087/WhatsApp_Image_2026-03-11_at_10.32.15.jpeg?ex=69b225be&is=69b0d43e&hm=7f6291d651d35e899283ceb6eea4412e479699f6e660cedbd95783c3a35d48da&",
+    "sourceStorage": "discord",
+    "discordMessageId": "1481117585469870171",
+    "discordAttachmentId": "1481117584794321087",
+    "discordFilename": "WhatsApp_Image_2026-03-11_at_10.32.15.jpeg",
+    "extractedFields": {
+      "merchant": "MELAK MART",
+      "transactionDate": "2026-03-11",
+      "currency": "IDR",
+      "amountTotal": 75400,
+      "category": "Shopping",
+      "notes": "Purchase of groceries and personal care items including beverages, snacks, bakery, cotton pads, and lotion."
+    },
+    "reviewedFields": {
+      "merchant": "MELAK MART",
+      "transactionDate": "2026-03-11",
+      "currency": "IDR",
+      "amountTotal": 75400,
+      "category": "Shopping",
+      "notes": "Purchase of groceries and personal care items including beverages, snacks, bakery, cotton pads, and lotion."
+    },
+    "provider": "gemini",
+    "rawModelOutput": "{\n  \"merchant\": \"MELAK MART\",\n  \"transactionDate\": \"2026-03-11\",\n  \"currency\": \"IDR\",\n  \"amountTotal\": 75400,\n  \"category\": \"Shopping\",\n  \"notes\": \"Purchase of groceries and personal care items including beverages, snacks, bakery, cotton pads, and lotion.\",\n  \"confidence\": 0.98,\n  \"issues\": []\n}",
+    "confidence": 0.98,
+    "issues": [],
+    "reviewStatus": "approved",
+    "expenseId": "144568c5-eabf-4286-acc6-3353b6e6e828",
+    "createdAt": "2026-03-11T02:32:40.572Z",
+    "updatedAt": "2026-03-11T02:33:03.334Z",
+    "reviewedAt": "2026-03-11T02:33:02.336Z"
+  },
+  {
     "id": "a9a6d5a9-c236-4120-bb24-41733b71ac0a",
     "locale": "id-ID",
     "documentType": "retail-receipt",

@@ -23,13 +23,23 @@ export function clearStatus(element) {
   element.className = "status-banner hidden";
 }
 
+export function fillSettings(settings) {
+  document.getElementById("settings-sheet-id").value = settings.googleSheetsSpreadsheetId || "";
+  document.getElementById("settings-discord-webhook").value = settings.discordWebhookUrl || "";
+}
+
 export function setHeroMeta() {
   document.getElementById("sheet-status").textContent = state.googleSheetsConfigured
     ? "Connected"
     : state.googleSheetsConfigReason || "Not configured";
   document.getElementById("locale-status").textContent = state.geminiConfigured
-    ? "ID locale · Gemini ready"
-    : "ID locale · Gemini missing key";
+    ? "ID / Gemini on"
+    : "ID / Gemini off";
+  document.getElementById("discord-status").textContent = state.discordUploadsConfigured
+    ? "Webhook on"
+    : state.settings.discordWebhookUrl
+      ? state.discordUploadsConfigReason || "Webhook off"
+      : "Local storage";
 }
 
 export function renderDraftFeedback(draft) {
@@ -60,6 +70,10 @@ export function setEditorMode({ title, stateLabel, submitLabel }) {
   document.getElementById("save-btn").textContent = submitLabel;
 }
 
+export function setListLoading(isLoading) {
+  document.getElementById("list-loading").classList.toggle("hidden", !isLoading);
+}
+
 export function renderExpenses(items) {
   const body = document.getElementById("expense-table");
   const empty = document.getElementById("expense-empty");
@@ -74,29 +88,20 @@ export function renderExpenses(items) {
   body.innerHTML = items
     .map((expense) => {
       const amount = currencyFormatter.format(expense.amountTotal || 0);
-      const syncClass =
-        expense.syncStatus === "synced"
-          ? "synced"
-          : expense.syncStatus === "error"
-            ? "error"
-            : expense.syncStatus === "skipped"
-              ? "skipped"
-              : "";
 
       return `
         <tr>
-          <td>
-            <strong>${escapeHtml(expense.merchant)}</strong>
-            <div>${escapeHtml(expense.notes || "")}</div>
+          <td class="expense-cell">
+            <div class="expense-title">${escapeHtml(expense.merchant)}</div>
+            <div class="expense-note">${escapeHtml(expense.notes || "")}</div>
           </td>
           <td>${escapeHtml(expense.transactionDate)}</td>
           <td class="amount">${amount}</td>
           <td>${escapeHtml(expense.category)}</td>
-          <td><span class="status-dot ${syncClass}">${escapeHtml(expense.syncStatus)}</span></td>
           <td>
-            <div class="actions">
+            <div class="actions actions-end">
               <button class="table-action" data-action="edit" data-id="${expense.id}" type="button">Edit</button>
-              <button class="sync-button" data-action="sync" data-id="${expense.id}" type="button">Sync</button>
+              <button class="table-action danger-button" data-action="delete" data-id="${expense.id}" type="button">Delete</button>
             </div>
           </td>
         </tr>
@@ -107,7 +112,7 @@ export function renderExpenses(items) {
 
 export function renderPagination() {
   const { page, totalPages } = state.pagination;
-  document.getElementById("page-label").textContent = `Page ${page} of ${totalPages}`;
+  document.getElementById("page-label").textContent = `${page} / ${totalPages}`;
   document.getElementById("prev-page-btn").disabled = page <= 1;
   document.getElementById("next-page-btn").disabled = page >= totalPages;
 }
@@ -134,7 +139,7 @@ export function updatePreview(upload) {
   if (!upload) {
     previewCard.classList.add("hidden");
     document.getElementById("preview-image").src = "";
-    document.getElementById("scan-provider").textContent = "Waiting for scan";
+    document.getElementById("scan-provider").textContent = "No file";
     return;
   }
 

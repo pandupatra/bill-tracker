@@ -5,18 +5,21 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { CATEGORIES, DEFAULT_CURRENCY, DEFAULT_LOCALE, PAGE_SIZE } from "./constants.js";
-import { findRecord, listRecords, upsertRecord } from "./lib/store.js";
+import { findRecord, listRecords, saveRecords, upsertRecord } from "./lib/store.js";
 import { loadEnvFile } from "./lib/loadEnv.js";
 import { normalizeScanDraft, validateExpenseInput } from "./lib/validation.js";
 import {
+  getDiscordUploadConfigState,
   getDiscordAttachmentUrl,
   isDiscordUploadConfigured,
   uploadReceiptToDiscord
 } from "./services/discordUploads.js";
 import { isGeminiConfigured, scanReceipt } from "./services/gemini.js";
 import {
+  deleteExpenseFromSheet,
   getGoogleSheetsConfigState,
   isGoogleSheetsConfigured,
+  listExpensesFromSheet,
   syncExpenseToSheet
 } from "./services/googleSheets.js";
 
@@ -61,9 +64,20 @@ async function saveLocalUpload(file) {
   };
 }
 
-async function saveUpload(file) {
-  if (isDiscordUploadConfigured()) {
-    return uploadReceiptToDiscord(file);
+function getRequestConfig(request) {
+  return {
+    googleSheetsSpreadsheetId: String(request.get("x-bill-tracker-sheet-id") || "").trim(),
+    discordWebhookUrl: String(request.get("x-bill-tracker-discord-webhook") || "").trim(),
+    googleServiceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "",
+    googleServiceAccountPrivateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "",
+    googleSheetsSheetName: process.env.GOOGLE_SHEETS_SHEET_NAME || "Expenses",
+    discordWebhookThreadId: process.env.DISCORD_WEBHOOK_THREAD_ID || ""
+  };
+}
+
+async function saveUpload(file, config) {
+  if (isDiscordUploadConfigured(config)) {
+    return uploadReceiptToDiscord(file, config);
   }
 
   return saveLocalUpload(file);
@@ -113,8 +127,8 @@ async function updateTrainingExample(scanId, patch) {
   return updated;
 }
 
-async function tryAutoSync(expense) {
-  if (!isGoogleSheetsConfigured()) {
+async function tryAutoSync(expense, config) {
+  if (!isGoogleSheetsConfigured(config)) {
     return {
       ...expense,
       syncStatus: "skipped",
@@ -123,7 +137,7 @@ async function tryAutoSync(expense) {
   }
 
   try {
-    const syncResult = await syncExpenseToSheet(expense);
+    const syncResult = await syncExpenseToSheet(expense, config);
     return {
       ...expense,
       ...syncResult,
@@ -139,17 +153,34 @@ async function tryAutoSync(expense) {
   }
 }
 
-async function resolveTrainingExampleImageUrl(example) {
+async function listExpensesFromSource(config) {
+  if (isGoogleSheetsConfigured(config)) {
+    return listExpensesFromSheet(config);
+  }
+
+  return listRecords("expenses.json");
+}
+
+async function findExpenseById(id, config) {
+  const expenses = await listExpensesFromSource(config);
+  return expenses.find((expense) => expense.id === id) ?? null;
+}
+
+async function resolveTrainingExampleImageUrl(example, config) {
   if (!example) {
     return null;
   }
 
   if (example.sourceStorage === "discord" && example.discordMessageId) {
-    return getDiscordAttachmentUrl({
-      messageId: example.discordMessageId,
-      attachmentId: example.discordAttachmentId,
-      filename: example.discordFilename
-    });
+    try {
+      return await getDiscordAttachmentUrl({
+        messageId: example.discordMessageId,
+        attachmentId: example.discordAttachmentId,
+        filename: example.discordFilename
+      }, config);
+    } catch {
+      // Fall back to the last known direct URL when this device uses a different webhook.
+    }
   }
 
   if (example.sourceImageDirectUrl) {
@@ -163,17 +194,29 @@ async function resolveTrainingExampleImageUrl(example) {
   return null;
 }
 
-app.get("/api/meta", (_request, response) => {
-  const googleSheetsState = getGoogleSheetsConfigState();
+function buildMetaResponse(request) {
+  const config = getRequestConfig(request);
+  const googleSheetsState = getGoogleSheetsConfigState(config);
+  const discordState = getDiscordUploadConfigState(config);
 
-  response.json({
+  return {
     categories: CATEGORIES,
     defaultCurrency: DEFAULT_CURRENCY,
     defaultLocale: DEFAULT_LOCALE,
     googleSheetsConfigured: googleSheetsState.configured,
     googleSheetsConfigReason: googleSheetsState.reason,
-    geminiConfigured: isGeminiConfigured()
-  });
+    discordUploadsConfigured: discordState.configured,
+    discordUploadsConfigReason: discordState.reason,
+    geminiConfigured: isGeminiConfigured(),
+    settings: {
+      googleSheetsSpreadsheetId: config.googleSheetsSpreadsheetId,
+      discordWebhookUrl: config.discordWebhookUrl
+    }
+  };
+}
+
+app.get("/api/meta", (request, response) => {
+  response.json(buildMetaResponse(request));
 });
 
 app.post("/api/scans", upload.single("receipt"), async (request, response) => {
@@ -184,7 +227,8 @@ app.post("/api/scans", upload.single("receipt"), async (request, response) => {
     }
 
     const scanId = randomUUID();
-    const uploadResult = await saveUpload(request.file);
+    const requestConfig = getRequestConfig(request);
+    const uploadResult = await saveUpload(request.file, requestConfig);
     const scanResult = await scanReceipt({
       file: request.file,
       base64Data: request.file.buffer.toString("base64"),
@@ -238,7 +282,7 @@ app.get("/api/scans/:id/source-image", async (request, response) => {
       return;
     }
 
-    const sourceUrl = await resolveTrainingExampleImageUrl(example);
+    const sourceUrl = await resolveTrainingExampleImageUrl(example, getRequestConfig(request));
     if (!sourceUrl) {
       response.status(404).json({ error: "Source image is unavailable." });
       return;
@@ -252,11 +296,12 @@ app.get("/api/scans/:id/source-image", async (request, response) => {
 });
 
 app.get("/api/expenses", async (request, response) => {
-  const allExpenses = await listRecords("expenses.json");
+  const config = getRequestConfig(request);
+  const allExpenses = await listExpensesFromSource(config);
   const search = String(request.query.search || "").trim().toLowerCase();
   const category = String(request.query.category || "all");
   const syncStatus = String(request.query.syncStatus || "all");
-  const page = Math.max(Number(request.query.page) || 1, 1);
+  const requestedPage = Math.max(Number(request.query.page) || 1, 1);
   const pageSize = Math.max(Number(request.query.pageSize) || PAGE_SIZE, 1);
 
   const filtered = allExpenses.filter((expense) => {
@@ -270,6 +315,8 @@ app.get("/api/expenses", async (request, response) => {
   });
 
   const totalItems = filtered.length;
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
+  const page = Math.min(requestedPage, totalPages);
   const startIndex = (page - 1) * pageSize;
   const items = filtered.slice(startIndex, startIndex + pageSize);
 
@@ -279,13 +326,14 @@ app.get("/api/expenses", async (request, response) => {
       page,
       pageSize,
       totalItems,
-      totalPages: Math.max(Math.ceil(totalItems / pageSize), 1)
+      totalPages
     }
   });
 });
 
 app.post("/api/expenses", async (request, response) => {
   try {
+    const config = getRequestConfig(request);
     const expense = buildExpenseRecord(request.body, {
       sourceImage: request.body.sourceImage || "",
       scanId: request.body.scanId || null,
@@ -294,8 +342,17 @@ app.post("/api/expenses", async (request, response) => {
       syncStatus: "pending"
     });
 
-    const saved = request.body.autoSync === false ? expense : await tryAutoSync(expense);
-    await upsertRecord("expenses.json", saved);
+    let saved = expense;
+    if (isGoogleSheetsConfigured(config)) {
+      saved = await tryAutoSync(expense, config);
+      if (saved.syncStatus !== "synced") {
+        response.status(500).json({ error: saved.syncError || "Failed to save expense to Google Sheets." });
+        return;
+      }
+    } else {
+      saved = request.body.autoSync === false ? expense : await tryAutoSync(expense, config);
+      await upsertRecord("expenses.json", saved);
+    }
 
     await updateTrainingExample(saved.scanId, {
       reviewedFields: {
@@ -319,7 +376,8 @@ app.post("/api/expenses", async (request, response) => {
 
 app.patch("/api/expenses/:id", async (request, response) => {
   try {
-    const current = await findRecord("expenses.json", request.params.id);
+    const config = getRequestConfig(request);
+    const current = await findExpenseById(request.params.id, config);
     if (!current) {
       response.status(404).json({ error: "Expense not found." });
       return;
@@ -348,7 +406,17 @@ app.patch("/api/expenses/:id", async (request, response) => {
       }
     );
 
-    await upsertRecord("expenses.json", next);
+    if (isGoogleSheetsConfigured(config)) {
+      const synced = await tryAutoSync(next, config);
+      if (synced.syncStatus !== "synced") {
+        response.status(500).json({ error: synced.syncError || "Failed to update expense in Google Sheets." });
+        return;
+      }
+      Object.assign(next, synced);
+    } else {
+      await upsertRecord("expenses.json", next);
+    }
+
     await updateTrainingExample(next.scanId, {
       reviewedFields: {
         merchant: next.merchant,
@@ -369,16 +437,49 @@ app.patch("/api/expenses/:id", async (request, response) => {
   }
 });
 
-app.post("/api/expenses/:id/sync", async (request, response) => {
+app.delete("/api/expenses/:id", async (request, response) => {
   try {
-    const current = await findRecord("expenses.json", request.params.id);
+    const config = getRequestConfig(request);
+    const current = await findExpenseById(request.params.id, config);
     if (!current) {
       response.status(404).json({ error: "Expense not found." });
       return;
     }
 
-    const synced = await tryAutoSync(current);
-    await upsertRecord("expenses.json", synced);
+    if (isGoogleSheetsConfigured(config)) {
+      await deleteExpenseFromSheet(current.sheetRowNumber, config);
+    } else {
+      const allExpenses = await listRecords("expenses.json");
+      const remainingExpenses = allExpenses.filter((expense) => expense.id !== current.id);
+      await saveRecords("expenses.json", remainingExpenses);
+    }
+
+    await updateTrainingExample(current.scanId, {
+      reviewedFields: null,
+      reviewStatus: "draft",
+      expenseId: null,
+      reviewedAt: null
+    });
+
+    response.json({ ok: true, id: current.id });
+  } catch (error) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/expenses/:id/sync", async (request, response) => {
+  try {
+    const config = getRequestConfig(request);
+    const current = await findExpenseById(request.params.id, config);
+    if (!current) {
+      response.status(404).json({ error: "Expense not found." });
+      return;
+    }
+
+    const synced = await tryAutoSync(current, config);
+    if (!isGoogleSheetsConfigured(config)) {
+      await upsertRecord("expenses.json", synced);
+    }
     response.json(synced);
   } catch (error) {
     response.status(500).json({ error: error.message });

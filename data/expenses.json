@@ -1,5 +1,24 @@
 [
   {
+    "id": "144568c5-eabf-4286-acc6-3353b6e6e828",
+    "merchant": "MELAK MART",
+    "transactionDate": "2026-03-11",
+    "currency": "IDR",
+    "amountTotal": 75400,
+    "category": "Shopping",
+    "notes": "Purchase of groceries and personal care items including beverages, snacks, bakery, cotton pads, and lotion.",
+    "sourceImage": "/api/scans/69085240-77f0-4b88-801a-b9755415e1f4/source-image",
+    "scanId": "69085240-77f0-4b88-801a-b9755415e1f4",
+    "scanStatus": "scanned",
+    "reviewStatus": "approved",
+    "syncStatus": "synced",
+    "sheetRowNumber": 6,
+    "syncError": "",
+    "reviewedAt": "2026-03-11T02:33:02.336Z",
+    "createdAt": "2026-03-11T02:33:02.336Z",
+    "updatedAt": "2026-03-11T02:33:03.290Z"
+  },
+  {
     "id": "8b245e3b-9e9c-459f-a073-a18dc5f95157",
     "merchant": "DANA",
     "transactionDate": "2026-03-08",

@@ -1,5 +1,13 @@
-function buildWebhookUrl(pathnameSuffix = "", extraParams = {}) {
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+function getWebhookUrl(config = {}) {
+  return config.discordWebhookUrl || process.env.DISCORD_WEBHOOK_URL || "";
+}
+
+function getThreadId(config = {}) {
+  return config.discordWebhookThreadId || process.env.DISCORD_WEBHOOK_THREAD_ID || "";
+}
+
+function buildWebhookUrl(config = {}, pathnameSuffix = "", extraParams = {}) {
+  const webhookUrl = getWebhookUrl(config);
   if (!webhookUrl) {
     throw new Error("Discord uploads are not configured.");
   }
@@ -13,8 +21,8 @@ function buildWebhookUrl(pathnameSuffix = "", extraParams = {}) {
     }
   }
 
-  if (process.env.DISCORD_WEBHOOK_THREAD_ID) {
-    url.searchParams.set("thread_id", process.env.DISCORD_WEBHOOK_THREAD_ID);
+  if (getThreadId(config)) {
+    url.searchParams.set("thread_id", getThreadId(config));
   }
 
   return url.toString();
@@ -61,17 +69,19 @@ function getAttachmentFromMessage(message, attachmentId, filename) {
   return message.attachments[0] || null;
 }
 
-export function isDiscordUploadConfigured() {
-  return Boolean(process.env.DISCORD_WEBHOOK_URL);
+export function isDiscordUploadConfigured(config = {}) {
+  return Boolean(getWebhookUrl(config));
 }
 
-export function getDiscordUploadConfigState() {
-  if (!process.env.DISCORD_WEBHOOK_URL) {
+export function getDiscordUploadConfigState(config = {}) {
+  const webhookUrl = getWebhookUrl(config);
+
+  if (!webhookUrl) {
     return { configured: false, reason: "Missing Discord webhook URL." };
   }
 
   try {
-    new URL(process.env.DISCORD_WEBHOOK_URL);
+    new URL(webhookUrl);
   } catch {
     return { configured: false, reason: "Invalid Discord webhook URL." };
   }
@@ -79,8 +89,8 @@ export function getDiscordUploadConfigState() {
   return { configured: true, reason: "" };
 }
 
-export async function uploadReceiptToDiscord(file) {
-  const state = getDiscordUploadConfigState();
+export async function uploadReceiptToDiscord(file, config = {}) {
+  const state = getDiscordUploadConfigState(config);
   if (!state.configured) {
     throw new Error(state.reason);
   }
@@ -101,7 +111,7 @@ export async function uploadReceiptToDiscord(file) {
     filename
   );
 
-  const response = await fetch(buildWebhookUrl("", { wait: "true" }), {
+  const response = await fetch(buildWebhookUrl(config, "", { wait: "true" }), {
     method: "POST",
     body: formData
   });
@@ -125,13 +135,13 @@ export async function uploadReceiptToDiscord(file) {
   };
 }
 
-export async function getDiscordAttachmentUrl({ messageId, attachmentId, filename }) {
-  const state = getDiscordUploadConfigState();
+export async function getDiscordAttachmentUrl({ messageId, attachmentId, filename }, config = {}) {
+  const state = getDiscordUploadConfigState(config);
   if (!state.configured) {
     throw new Error(state.reason);
   }
 
-  const response = await fetch(buildWebhookUrl(`/messages/${messageId}`), {
+  const response = await fetch(buildWebhookUrl(config, `/messages/${messageId}`), {
     method: "GET"
   });
 
