@@ -45,6 +45,16 @@ async function bootstrap() {
   await refreshExpenses();
 }
 
+function syncRuntimeSettingsFromInputs() {
+  const nextSettings = {
+    googleSheetsSpreadsheetId: document.getElementById("settings-sheet-id")?.value.trim() || state.settings.googleSheetsSpreadsheetId || "",
+    discordWebhookUrl: document.getElementById("settings-discord-webhook")?.value.trim() || state.settings.discordWebhookUrl || ""
+  };
+
+  setRuntimeSettings(nextSettings);
+  return nextSettings;
+}
+
 function bindEvents() {
   document.getElementById("settings-form").addEventListener("submit", onSaveSettings);
   document.getElementById("scan-form").addEventListener("submit", onScanSubmit);
@@ -120,10 +130,7 @@ async function onSaveSettings(event) {
 
   try {
     showStatus(settingsStatus, "Saving config...", "success");
-    const nextSettings = {
-      googleSheetsSpreadsheetId: document.getElementById("settings-sheet-id").value.trim(),
-      discordWebhookUrl: document.getElementById("settings-discord-webhook").value.trim()
-    };
+    const nextSettings = syncRuntimeSettingsFromInputs();
 
     if (nextSettings.discordWebhookUrl) {
       try {
@@ -134,7 +141,6 @@ async function onSaveSettings(event) {
     }
 
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
-    setRuntimeSettings(nextSettings);
     const meta = await getMeta();
     applyMeta(meta);
     showStatus(settingsStatus, "Saved on this device.", "success");
@@ -178,6 +184,7 @@ function setUpload(file) {
 
 async function onScanSubmit(event) {
   event.preventDefault();
+  syncRuntimeSettingsFromInputs();
   if (!state.currentUpload?.file) {
     showStatus(scanStatus, "Choose a receipt image before scanning.", "error");
     return;
@@ -206,16 +213,13 @@ async function onScanSubmit(event) {
 
 async function onSaveExpense(event) {
   event.preventDefault();
+  syncRuntimeSettingsFromInputs();
   const payload = readForm();
 
   try {
     if (state.editingExpenseId) {
       await updateExpense(state.editingExpenseId, payload);
-      showStatus(
-        scanStatus,
-        state.googleSheetsConfigured ? "Updated in sheet." : "Expense updated.",
-        "success"
-      );
+      showStatus(scanStatus, "Updated in sheet.", "success");
     } else {
       await createExpense({
         ...payload,
@@ -223,13 +227,7 @@ async function onSaveExpense(event) {
         sourceImage: state.currentDraft?.sourceImage || "",
         autoSync: true
       });
-      showStatus(
-        scanStatus,
-        state.googleSheetsConfigured
-          ? "Saved to sheet."
-          : "Saved locally.",
-        "success"
-      );
+      showStatus(scanStatus, "Saved to sheet.", "success");
     }
 
     resetEditor();
@@ -251,6 +249,7 @@ function readForm() {
 }
 
 async function refreshExpenses() {
+  syncRuntimeSettingsFromInputs();
   setListLoading(true);
 
   try {
@@ -281,6 +280,7 @@ async function refreshExpenses() {
 }
 
 async function onTableAction(event) {
+  syncRuntimeSettingsFromInputs();
   const button = event.target.closest("button[data-action]");
   if (!button) {
     return;
@@ -327,11 +327,7 @@ async function onTableAction(event) {
       if (state.editingExpenseId === expense.id) {
         resetEditor();
       }
-      showStatus(
-        scanStatus,
-        state.googleSheetsConfigured ? "Deleted from sheet." : "Expense deleted.",
-        "success"
-      );
+      showStatus(scanStatus, "Deleted from sheet.", "success");
       await refreshExpenses();
     } catch (error) {
       showStatus(scanStatus, error.message, "error");

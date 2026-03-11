@@ -1,6 +1,6 @@
 # Bill Tracker
 
-Bill Tracker is a small receipt review and expense logging app for Indonesian retail receipts. It combines a Node.js/Express backend with a vanilla JavaScript frontend, supports AI-assisted receipt extraction, stores approved expenses locally in JSON files, and can sync approved rows to Google Sheets.
+Bill Tracker is a small receipt review and expense logging app for Indonesian retail receipts. It combines a Node.js/Express backend with a vanilla JavaScript frontend, supports AI-assisted receipt extraction, and uses Google Sheets as the expense database.
 
 The app is built around a review-first workflow:
 
@@ -15,10 +15,8 @@ The app is built around a review-first workflow:
 - Scans receipt images through Gemini when configured.
 - Falls back to a mock extractor when Gemini is not configured, so the review flow still works.
 - Supports manual expense entry without scanning.
-- Persists approved expenses in `data/expenses.json`.
 - Persists scan drafts and reviewed corrections in `data/training-examples.json`.
 - Stores uploaded receipt images either locally or in Discord, depending on configuration.
-- Re-syncs existing expenses to Google Sheets on demand.
 - Supports searching, filtering, and paginating approved expenses from the UI.
 
 ## Main workflows
@@ -41,15 +39,14 @@ The app is built around a review-first workflow:
 ### 2. Save an approved expense
 
 - When the form is submitted, the app validates and normalizes the values.
-- The approved expense is written to `data/expenses.json`.
+- The approved expense is written directly to Google Sheets.
 - If the expense originated from a scan, the related training example is updated with `reviewedFields` and linked back to the approved expense.
-- If auto-sync is enabled, the app immediately attempts Google Sheets sync.
+- The request succeeds only after the row is confirmed in Google Sheets.
 
 ### 3. Edit and re-sync an expense
 
 - Existing expenses can be edited from the ledger table.
-- If an expense already has a Google Sheets row number, editing sets it back to `pending`.
-- Users can manually re-run sync from the ledger.
+- If an expense already has a Google Sheets row number, editing updates that row in place.
 
 ### 4. Store receipt images
 
@@ -64,16 +61,14 @@ The app is built around a review-first workflow:
 - Multer for file upload handling
 - Google Gemini API for receipt extraction
 - Discord webhooks for optional image storage
-- Google Sheets API for optional spreadsheet sync
+- Google Sheets API for expense storage
 - Vanilla HTML, CSS, and JavaScript frontend
-- JSON files for persistence
 
 ## Project structure
 
 ```text
 bill-tracker/
 |-- data/
-|   |-- expenses.json
 |   |-- training-examples.json
 |   `-- uploads/
 |-- public/
@@ -105,11 +100,14 @@ bill-tracker/
 - Node.js 18 or later
 - npm
 
+Required for expense storage:
+
+- Google service account + spreadsheet
+
 Optional integrations:
 
 - Gemini API key for real receipt extraction
 - Discord webhook for remote receipt image storage
-- Google service account + spreadsheet for sync
 
 ## Installation
 
@@ -173,7 +171,6 @@ Copy `.env.example` to `.env` and fill in the values you need.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GOOGLE_SHEETS_SPREADSHEET_ID` | No | Target spreadsheet ID. |
 | `GOOGLE_SHEETS_SHEET_NAME` | No | Sheet tab name. Defaults to `Expenses`. |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | No | Service account email used for JWT auth. |
 | `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | No | Full PEM private key content. Must include `BEGIN PRIVATE KEY`. Use escaped newlines in `.env`. |
@@ -192,7 +189,6 @@ DISCORD_WEBHOOK_URL=
 DISCORD_WEBHOOK_THREAD_ID=
 
 # Google Sheets
-GOOGLE_SHEETS_SPREADSHEET_ID=
 GOOGLE_SHEETS_SHEET_NAME=Expenses
 GOOGLE_SERVICE_ACCOUNT_EMAIL=
 GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
@@ -214,9 +210,7 @@ GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END P
 
 ### Google Sheets not configured
 
-- Expenses are still saved locally.
-- Sync status becomes `skipped`.
-- Sync error explains that Google Sheets is not configured.
+- Expense list and save actions return an error until a spreadsheet is configured.
 
 ## Validation and normalization rules
 
@@ -251,33 +245,7 @@ Defaults:
 
 ## Data storage
 
-This app does not use a database. It stores records in JSON files under `data/`.
-
-### `data/expenses.json`
-
-Approved expense records. Example shape:
-
-```json
-{
-  "id": "uuid",
-  "merchant": "Indomaret",
-  "transactionDate": "2026-03-10",
-  "currency": "IDR",
-  "amountTotal": 76300,
-  "category": "Shopping",
-  "notes": "Purchase of groceries.",
-  "sourceImage": "/api/scans/<scanId>/source-image",
-  "scanId": "uuid-or-null",
-  "scanStatus": "scanned | manual | reviewed",
-  "reviewStatus": "approved",
-  "syncStatus": "pending | synced | error | skipped",
-  "sheetRowNumber": 1,
-  "syncError": "",
-  "reviewedAt": "ISO timestamp",
-  "createdAt": "ISO timestamp",
-  "updatedAt": "ISO timestamp"
-}
-```
+Approved expenses live in Google Sheets. Local JSON storage is only used for scan/training history and uploaded images.
 
 ### `data/training-examples.json`
 
@@ -314,9 +282,9 @@ Scan and review history used as correction/training examples. Example shape:
 }
 ```
 
-## Google Sheets sync format
+## Google Sheets format
 
-When an expense is synced, the app writes columns `A:K` in this order:
+The app writes columns `A:P` in this order:
 
 | Column | Value |
 | --- | --- |
@@ -328,16 +296,20 @@ When an expense is synced, the app writes columns `A:K` in this order:
 | F | `category` |
 | G | `notes` |
 | H | `sourceImage` |
-| I | `reviewedAt` |
-| J | `syncStatus` |
-| K | `syncError` |
+| I | `scanId` |
+| J | `scanStatus` |
+| K | `reviewStatus` |
+| L | `reviewedAt` |
+| M | `syncStatus` |
+| N | `syncError` |
+| O | `createdAt` |
+| P | `updatedAt` |
 
 Behavior:
 
 - New expenses are appended.
-- Existing synced expenses with `sheetRowNumber` are updated in place.
-- Successful sync sets `syncStatus` to `synced`.
-- Failed sync sets `syncStatus` to `error` and stores the error message.
+- Existing expenses with `sheetRowNumber` are updated in place.
+- Each save verifies the row is readable back from the sheet before returning success.
 
 ## Frontend behavior
 
@@ -352,10 +324,8 @@ It includes:
 - A ledger table with:
   - search
   - category filter
-  - sync-status filter
   - pagination
   - edit action
-  - manual sync action
 
 ## API reference
 
@@ -423,7 +393,7 @@ Behavior:
 
 ### `GET /api/expenses`
 
-Lists approved expenses with filtering and pagination.
+Lists approved expenses from Google Sheets with filtering and pagination.
 
 Query parameters:
 

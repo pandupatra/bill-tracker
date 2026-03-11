@@ -1,7 +1,13 @@
 import { google } from "googleapis";
 
+const EXPENSE_COLUMN_COUNT = 16;
+const EXPENSE_RANGE = "A:P";
+const SHEET_SCAN_RANGE = "A:AD";
+const LEGACY_SHIFT_START_INDEX = 14;
+const LEGACY_CLEAR_RANGE = "Q:AD";
+
 function getSpreadsheetId(config = {}) {
-  return config.googleSheetsSpreadsheetId || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "";
+  return String(config.googleSheetsSpreadsheetId || "").trim();
 }
 
 function getServiceAccountEmail(config = {}) {
@@ -110,9 +116,120 @@ function toRow(expense) {
   ];
 }
 
-function parseRowNumber(updatedRange) {
-  const match = updatedRange?.match(/![A-Z]+(\d+):[A-Z]+(\d+)/i);
-  return match ? Number(match[1]) : null;
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function getFirstCellFromValues(values) {
+  if (!Array.isArray(values) || values.length === 0 || !Array.isArray(values[0])) {
+    return "";
+  }
+
+  return normalizeText(values[0][0]);
+}
+
+function hasAnyValue(row = []) {
+  return row.some((cell) => normalizeText(cell));
+}
+
+function getCanonicalRowValues(row = []) {
+  const primary = row.slice(0, EXPENSE_COLUMN_COUNT);
+  const fallback = row.slice(LEGACY_SHIFT_START_INDEX, LEGACY_SHIFT_START_INDEX + EXPENSE_COLUMN_COUNT);
+
+  if (normalizeText(primary[0])) {
+    return primary;
+  }
+
+  if (normalizeText(fallback[0])) {
+    return fallback;
+  }
+
+  return primary;
+}
+
+async function findRowNumberById(client, expenseId, config = {}) {
+  const response = await client.spreadsheets.values.get({
+    spreadsheetId: getSpreadsheetId(config),
+    range: `${getSheetName(config)}!${SHEET_SCAN_RANGE}`
+  });
+
+  const rows = Array.isArray(response.data.values) ? response.data.values : [];
+  const matchIndex = rows.findIndex((row) => {
+    const values = getCanonicalRowValues(row);
+    return normalizeText(values[0]) === normalizeText(expenseId);
+  });
+  return matchIndex === -1 ? null : matchIndex + 1;
+}
+
+async function readExpenseByRowNumber(client, rowNumber, config = {}) {
+  if (!rowNumber) {
+    return null;
+  }
+
+  const response = await client.spreadsheets.values.get({
+    spreadsheetId: getSpreadsheetId(config),
+    range: `${getSheetName(config)}!A${rowNumber}:AD${rowNumber}`
+  });
+
+  const row = Array.isArray(response.data.values) ? response.data.values[0] : null;
+  return row ? fromRow(getCanonicalRowValues(row), rowNumber) : null;
+}
+
+async function getNextExpenseRowNumber(client, config = {}) {
+  const response = await client.spreadsheets.values.get({
+    spreadsheetId: getSpreadsheetId(config),
+    range: `${getSheetName(config)}!${SHEET_SCAN_RANGE}`
+  });
+
+  const rows = Array.isArray(response.data.values) ? response.data.values : [];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (hasAnyValue(rows[index])) {
+      return index + 2;
+    }
+  }
+
+  return 1;
+}
+
+async function clearLegacyShiftedCells(client, rowNumber, config = {}) {
+  await client.spreadsheets.values.clear({
+    spreadsheetId: getSpreadsheetId(config),
+    range: `${getSheetName(config)}!${LEGACY_CLEAR_RANGE.replace("Q", `Q${rowNumber}`).replace("AD", `AD${rowNumber}`)}`
+  });
+}
+
+async function resolveRowNumberWithRetry(client, expenseId, config = {}, attempts = 5, delayMs = 250) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const rowNumber = await findRowNumberById(client, expenseId, config);
+    if (rowNumber) {
+      return rowNumber;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return null;
+}
+
+async function verifyExpenseAtRowWithRetry(client, expenseId, rowNumber, config = {}, attempts = 5, delayMs = 250) {
+  if (!rowNumber) {
+    return false;
+  }
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const verifiedExpense = await readExpenseByRowNumber(client, rowNumber, config);
+    if (verifiedExpense && normalizeText(verifiedExpense.id) === normalizeText(expenseId)) {
+      return true;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return false;
 }
 
 function normalizeText(value) {
@@ -196,12 +313,12 @@ export async function listExpensesFromSheet(config = {}) {
 
   const response = await client.spreadsheets.values.get({
     spreadsheetId: getSpreadsheetId(config),
-    range: `${getSheetName(config)}!A:P`
+    range: `${getSheetName(config)}!${SHEET_SCAN_RANGE}`
   });
 
   const rows = Array.isArray(response.data.values) ? response.data.values : [];
   return rows
-    .map((row, index) => fromRow(row, index + 1))
+    .map((row, index) => fromRow(getCanonicalRowValues(row), index + 1))
     .filter(Boolean)
     .sort((left, right) => {
       const leftTime = Date.parse(left.createdAt || left.reviewedAt || "") || 0;
@@ -253,34 +370,70 @@ export async function syncExpenseToSheet(expense, config = {}) {
 
   const spreadsheetId = getSpreadsheetId(config);
   const sheetName = getSheetName(config);
-  const values = [toRow(expense)];
+  const persistedExpense = {
+    ...expense,
+    syncStatus: "synced",
+    syncError: ""
+  };
+  const values = [toRow(persistedExpense)];
 
   if (expense.sheetRowNumber) {
-    await client.spreadsheets.values.update({
+    const existingRowResponse = await client.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!A${expense.sheetRowNumber}:AD${expense.sheetRowNumber}`
+    });
+    const existingRow = Array.isArray(existingRowResponse.data.values) ? existingRowResponse.data.values[0] : [];
+    const hadLegacyShift = !normalizeText(existingRow[0]) && normalizeText(existingRow[LEGACY_SHIFT_START_INDEX]);
+
+    const updateResult = await client.spreadsheets.values.update({
       spreadsheetId,
       range: `${sheetName}!A${expense.sheetRowNumber}:P${expense.sheetRowNumber}`,
+      includeValuesInResponse: true,
       valueInputOption: "USER_ENTERED",
       requestBody: { values }
     });
 
+    if (hadLegacyShift) {
+      await clearLegacyShiftedCells(client, expense.sheetRowNumber, config);
+    }
+
+    const responseId = getFirstCellFromValues(updateResult.data.updatedData?.values);
+    const verified =
+      responseId === normalizeText(persistedExpense.id) ||
+      await verifyExpenseAtRowWithRetry(client, persistedExpense.id, expense.sheetRowNumber, config);
+
+    if (!verified) {
+      throw new Error("Google Sheets update could not be verified.");
+    }
+
     return {
-      syncStatus: "synced",
+      ...persistedExpense,
       sheetRowNumber: expense.sheetRowNumber,
-      syncError: ""
     };
   }
 
-  const appendResult = await client.spreadsheets.values.append({
+  const nextRowNumber = await getNextExpenseRowNumber(client, config);
+  const appendResult = await client.spreadsheets.values.update({
     spreadsheetId,
-    range: `${sheetName}!A:P`,
+    range: `${sheetName}!A${nextRowNumber}:P${nextRowNumber}`,
+    includeValuesInResponse: true,
     valueInputOption: "USER_ENTERED",
-    insertDataOption: "INSERT_ROWS",
     requestBody: { values }
   });
 
+  const responseId = getFirstCellFromValues(appendResult.data.updatedData?.values);
+  const sheetRowNumber = nextRowNumber || await resolveRowNumberWithRetry(client, persistedExpense.id, config);
+
+  const verified =
+    responseId === normalizeText(persistedExpense.id) ||
+    await verifyExpenseAtRowWithRetry(client, persistedExpense.id, sheetRowNumber, config);
+
+  if (!verified) {
+    throw new Error("Google Sheets append could not be verified.");
+  }
+
   return {
-    syncStatus: "synced",
-    sheetRowNumber: parseRowNumber(appendResult.data.updates?.updatedRange),
-    syncError: ""
+    ...persistedExpense,
+    sheetRowNumber
   };
 }

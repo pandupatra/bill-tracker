@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { CATEGORIES, DEFAULT_CURRENCY, DEFAULT_LOCALE, PAGE_SIZE } from "./constants.js";
-import { findRecord, listRecords, saveRecords, upsertRecord } from "./lib/store.js";
+import { findRecord, listRecords, upsertRecord } from "./lib/store.js";
 import { loadEnvFile } from "./lib/loadEnv.js";
 import { normalizeScanDraft, validateExpenseInput } from "./lib/validation.js";
 import {
@@ -153,16 +153,22 @@ async function tryAutoSync(expense, config) {
   }
 }
 
-async function listExpensesFromSource(config) {
-  if (isGoogleSheetsConfigured(config)) {
-    return listExpensesFromSheet(config);
-  }
+function createHttpError(message, statusCode = 500) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
 
-  return listRecords("expenses.json");
+function requireGoogleSheets(config) {
+  const state = getGoogleSheetsConfigState(config);
+  if (!state.configured) {
+    throw createHttpError(state.reason || "Google Sheets is not configured.", 400);
+  }
 }
 
 async function findExpenseById(id, config) {
-  const expenses = await listExpensesFromSource(config);
+  requireGoogleSheets(config);
+  const expenses = await listExpensesFromSheet(config);
   return expenses.find((expense) => expense.id === id) ?? null;
 }
 
@@ -296,44 +302,50 @@ app.get("/api/scans/:id/source-image", async (request, response) => {
 });
 
 app.get("/api/expenses", async (request, response) => {
-  const config = getRequestConfig(request);
-  const allExpenses = await listExpensesFromSource(config);
-  const search = String(request.query.search || "").trim().toLowerCase();
-  const category = String(request.query.category || "all");
-  const syncStatus = String(request.query.syncStatus || "all");
-  const requestedPage = Math.max(Number(request.query.page) || 1, 1);
-  const pageSize = Math.max(Number(request.query.pageSize) || PAGE_SIZE, 1);
+  try {
+    const config = getRequestConfig(request);
+    requireGoogleSheets(config);
+    const allExpenses = await listExpensesFromSheet(config);
+    const search = String(request.query.search || "").trim().toLowerCase();
+    const category = String(request.query.category || "all");
+    const syncStatus = String(request.query.syncStatus || "all");
+    const requestedPage = Math.max(Number(request.query.page) || 1, 1);
+    const pageSize = Math.max(Number(request.query.pageSize) || PAGE_SIZE, 1);
 
-  const filtered = allExpenses.filter((expense) => {
-    const matchesSearch =
-      !search ||
-      expense.merchant.toLowerCase().includes(search) ||
-      expense.notes.toLowerCase().includes(search);
-    const matchesCategory = category === "all" || expense.category === category;
-    const matchesSync = syncStatus === "all" || expense.syncStatus === syncStatus;
-    return matchesSearch && matchesCategory && matchesSync;
-  });
+    const filtered = allExpenses.filter((expense) => {
+      const matchesSearch =
+        !search ||
+        expense.merchant.toLowerCase().includes(search) ||
+        expense.notes.toLowerCase().includes(search);
+      const matchesCategory = category === "all" || expense.category === category;
+      const matchesSync = syncStatus === "all" || expense.syncStatus === syncStatus;
+      return matchesSearch && matchesCategory && matchesSync;
+    });
 
-  const totalItems = filtered.length;
-  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
-  const page = Math.min(requestedPage, totalPages);
-  const startIndex = (page - 1) * pageSize;
-  const items = filtered.slice(startIndex, startIndex + pageSize);
+    const totalItems = filtered.length;
+    const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
+    const page = Math.min(requestedPage, totalPages);
+    const startIndex = (page - 1) * pageSize;
+    const items = filtered.slice(startIndex, startIndex + pageSize);
 
-  response.json({
-    items,
-    pagination: {
-      page,
-      pageSize,
-      totalItems,
-      totalPages
-    }
-  });
+    response.json({
+      items,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages
+      }
+    });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ error: error.message });
+  }
 });
 
 app.post("/api/expenses", async (request, response) => {
   try {
     const config = getRequestConfig(request);
+    requireGoogleSheets(config);
     const expense = buildExpenseRecord(request.body, {
       sourceImage: request.body.sourceImage || "",
       scanId: request.body.scanId || null,
@@ -342,16 +354,10 @@ app.post("/api/expenses", async (request, response) => {
       syncStatus: "pending"
     });
 
-    let saved = expense;
-    if (isGoogleSheetsConfigured(config)) {
-      saved = await tryAutoSync(expense, config);
-      if (saved.syncStatus !== "synced") {
-        response.status(500).json({ error: saved.syncError || "Failed to save expense to Google Sheets." });
-        return;
-      }
-    } else {
-      saved = request.body.autoSync === false ? expense : await tryAutoSync(expense, config);
-      await upsertRecord("expenses.json", saved);
+    const saved = await tryAutoSync(expense, config);
+    if (saved.syncStatus !== "synced") {
+      response.status(500).json({ error: saved.syncError || "Failed to save expense to Google Sheets." });
+      return;
     }
 
     await updateTrainingExample(saved.scanId, {
@@ -377,6 +383,7 @@ app.post("/api/expenses", async (request, response) => {
 app.patch("/api/expenses/:id", async (request, response) => {
   try {
     const config = getRequestConfig(request);
+    requireGoogleSheets(config);
     const current = await findExpenseById(request.params.id, config);
     if (!current) {
       response.status(404).json({ error: "Expense not found." });
@@ -406,16 +413,12 @@ app.patch("/api/expenses/:id", async (request, response) => {
       }
     );
 
-    if (isGoogleSheetsConfigured(config)) {
-      const synced = await tryAutoSync(next, config);
-      if (synced.syncStatus !== "synced") {
-        response.status(500).json({ error: synced.syncError || "Failed to update expense in Google Sheets." });
-        return;
-      }
-      Object.assign(next, synced);
-    } else {
-      await upsertRecord("expenses.json", next);
+    const synced = await tryAutoSync(next, config);
+    if (synced.syncStatus !== "synced") {
+      response.status(500).json({ error: synced.syncError || "Failed to update expense in Google Sheets." });
+      return;
     }
+    Object.assign(next, synced);
 
     await updateTrainingExample(next.scanId, {
       reviewedFields: {
@@ -440,19 +443,14 @@ app.patch("/api/expenses/:id", async (request, response) => {
 app.delete("/api/expenses/:id", async (request, response) => {
   try {
     const config = getRequestConfig(request);
+    requireGoogleSheets(config);
     const current = await findExpenseById(request.params.id, config);
     if (!current) {
       response.status(404).json({ error: "Expense not found." });
       return;
     }
 
-    if (isGoogleSheetsConfigured(config)) {
-      await deleteExpenseFromSheet(current.sheetRowNumber, config);
-    } else {
-      const allExpenses = await listRecords("expenses.json");
-      const remainingExpenses = allExpenses.filter((expense) => expense.id !== current.id);
-      await saveRecords("expenses.json", remainingExpenses);
-    }
+    await deleteExpenseFromSheet(current.sheetRowNumber, config);
 
     await updateTrainingExample(current.scanId, {
       reviewedFields: null,
@@ -470,6 +468,7 @@ app.delete("/api/expenses/:id", async (request, response) => {
 app.post("/api/expenses/:id/sync", async (request, response) => {
   try {
     const config = getRequestConfig(request);
+    requireGoogleSheets(config);
     const current = await findExpenseById(request.params.id, config);
     if (!current) {
       response.status(404).json({ error: "Expense not found." });
@@ -477,12 +476,9 @@ app.post("/api/expenses/:id/sync", async (request, response) => {
     }
 
     const synced = await tryAutoSync(current, config);
-    if (!isGoogleSheetsConfigured(config)) {
-      await upsertRecord("expenses.json", synced);
-    }
     response.json(synced);
   } catch (error) {
-    response.status(500).json({ error: error.message });
+    response.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
